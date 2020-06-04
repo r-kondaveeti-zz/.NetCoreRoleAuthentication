@@ -1,0 +1,77 @@
+﻿using System;
+using Microsoft.AspNetCore.Mvc;
+using Order_Management.Domain.Model;
+using Order_Management.Domain;
+using Order_Management.ResponseModel;
+using Microsoft.AspNetCore.Authorization;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Linq;
+
+namespace Order_Management.Controllers
+{
+    [ApiController]
+    [Route("[controller]")]
+    public class OrderController : ControllerBase
+    {
+        private readonly ApplicationDbContext _dbContext;
+
+        public OrderController(ApplicationDbContext dbContext)
+        {
+            _dbContext = dbContext;
+        }
+
+        [HttpPut]
+        [Authorize(Roles = "Admin")]
+        public IActionResult PutOrder([FromBody] Order order)
+        {
+            _dbContext.Orders.Add(order);
+            _dbContext.SaveChanges();
+
+            return Ok(new ApiResponse { Message = "order inserted", Data = order });
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Admin, User")]
+        public IActionResult GetOrder()
+        {
+            //CHANGE: tenantId will be decrypted from JWT
+            //string tenantId = HttpContext.Request.Query["tenantId"].ToString();
+
+            string header = HttpContext.Request.Headers["Authorization"].ToString();
+            header = header.Replace("Bearer ", String.Empty);
+
+            var handler = new JwtSecurityTokenHandler();
+            var jsonToken = handler.ReadToken(header);
+            var tokenS = handler.ReadToken(header) as JwtSecurityToken;
+
+            var tenantId = tokenS.Claims.First(claim => claim.Type == "TenantId").Value;
+
+            return Ok(new ApiResponse { Message = "all orders", Data = _dbContext.GetAllOrders(tenantId) });
+        }
+
+        [HttpDelete]
+        [Authorize(Roles = "Admin")]
+        public IActionResult DeleteOrder()
+        {
+            Guid id = new Guid(HttpContext.Request.Query["id"].ToString());
+
+            //CHANGE: tenantId will be decrypted from JWT
+            string tenantId = HttpContext.Request.Query["tenantId"].ToString();
+
+            var order = _dbContext.GetOrder(id, tenantId);
+
+            if (order == null)
+            {
+                return Ok(new ApiResponse { Message = "order not found", Data = null });
+            }
+
+            _dbContext.Orders.Remove(order);
+            _dbContext.SaveChanges();
+            Console.WriteLine(id);
+            
+            return Ok(new ApiResponse { Message = "order deleted", Data = order});
+        }
+
+    } 
+}
