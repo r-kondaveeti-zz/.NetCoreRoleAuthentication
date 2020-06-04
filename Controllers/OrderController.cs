@@ -23,8 +23,9 @@ namespace Order_Management.Controllers
 
         [HttpPut]
         [Authorize(Roles = "Admin")]
-        public IActionResult PutOrder([FromBody] Order order)
+        public IActionResult PutOrder([FromBody] OrderModel orderModel)
         {
+            Order order = new Order { Name = orderModel.Name, Status = orderModel.Status, TenantId = ExtractTenantId() };
             _dbContext.Orders.Add(order);
             _dbContext.SaveChanges();
 
@@ -35,19 +36,7 @@ namespace Order_Management.Controllers
         [Authorize(Roles = "Admin, User")]
         public IActionResult GetOrder()
         {
-            //CHANGE: tenantId will be decrypted from JWT
-            //string tenantId = HttpContext.Request.Query["tenantId"].ToString();
-
-            string header = HttpContext.Request.Headers["Authorization"].ToString();
-            header = header.Replace("Bearer ", String.Empty);
-
-            var handler = new JwtSecurityTokenHandler();
-            var jsonToken = handler.ReadToken(header);
-            var tokenS = handler.ReadToken(header) as JwtSecurityToken;
-
-            var tenantId = tokenS.Claims.First(claim => claim.Type == "TenantId").Value;
-
-            return Ok(new ApiResponse { Message = "all orders", Data = _dbContext.GetAllOrders(tenantId) });
+            return Ok(new ApiResponse { Message = "all orders", Data = _dbContext.GetAllOrders(ExtractTenantId()) });
         }
 
         [HttpDelete]
@@ -55,10 +44,7 @@ namespace Order_Management.Controllers
         public IActionResult DeleteOrder()
         {
             Guid id = new Guid(HttpContext.Request.Query["id"].ToString());
-
-            //CHANGE: tenantId will be decrypted from JWT
-            string tenantId = HttpContext.Request.Query["tenantId"].ToString();
-
+            string tenantId = ExtractTenantId();
             var order = _dbContext.GetOrder(id, tenantId);
 
             if (order == null)
@@ -73,5 +59,25 @@ namespace Order_Management.Controllers
             return Ok(new ApiResponse { Message = "order deleted", Data = order});
         }
 
-    } 
+        private string ExtractTenantId()
+        {
+            string header = HttpContext.Request.Headers["Authorization"].ToString();
+            header = header.Replace("Bearer ", String.Empty);
+
+            var handler = new JwtSecurityTokenHandler();
+            var jsonToken = handler.ReadToken(header);
+            var tokenS = handler.ReadToken(header) as JwtSecurityToken;
+
+            var tenantId = tokenS.Claims.First(claim => claim.Type == "TenantId").Value;
+
+            return tenantId;
+        }
+
+    }
+
+    public class OrderModel
+    {
+        public string Name { get; set; }
+        public string Status { get; set; }
+    }
 }
